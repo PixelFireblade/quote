@@ -1,13 +1,29 @@
-import { useReducer, useState } from 'react';
+import { useReducer, useState, useEffect, useRef } from 'react';
 import './App.css';
 import Modal from './Modal';
 
 const reducer = (state, action) => {
   switch (action.type) {
     case 'addBank':
-      console.log("hi")
       saveqLib([...state.qLibrary, action.newBank])
       return { qLibrary: [...state.qLibrary, action.newBank] }
+    case 'addCorrect':
+      // console.log("SUP")
+      let v = state.qLibrary;
+      v[action.bankNum].quotes[action.quoteInd].correct += 1
+      // console.log(v[action.bankNum].quotes[action.quoteInd].correct)
+      saveqLib(v)
+      return { qLibrary: v }
+    case 'addIncorrect':
+
+      let j = state.qLibrary;
+      j[action.bankNum].quotes[action.quoteInd].incorrect += 1
+      // console.log(j[action.bankNum].quotes[action.quoteInd].incorrect)
+
+      saveqLib(j)
+      return { qLibrary: j }
+
+
     default:
       return state
   }
@@ -28,10 +44,46 @@ const saveqLib = (qLib) => {
 
 }
 
+const useKeyPress = (target) => {
+
+
+  const [pressed, setPressed] = useState(false);  // State for key press
+  const downHandler = ({ key }) => {
+    if (key == target) setPressed(true);
+  };
+  const upHandler = ({ key }) => {
+    if (key === target) setPressed(false);
+  };
+  useEffect(() => {
+    window.addEventListener('keydown', downHandler);
+    window.addEventListener('keyup', upHandler);
+
+    return () => {
+      window.removeEventListener('keydown', downHandler);
+      window.removeEventListener('keyup', upHandler);
+    };
+  }, []);
+
+  return pressed;
+
+}
+
+
+const mod = (n, m) => {
+  return ((n % m) + m) % m;
+}
 function App() {
   let x = getLib()
   const [open, setOpen] = useState(false);
-  
+
+  const control = useKeyPress("Control");
+  const tab = useKeyPress("Tab");
+  const up = useKeyPress("ArrowUp");
+  const down = useKeyPress("ArrowDown");
+  const space = useKeyPress("Space")
+
+  const currentQuoteLearnRef = useRef(null);
+
   const [currNumber, setCurrNumber] = useState(0);
   const [quoteShown, setQuoteShown] = useState(true);
 
@@ -41,9 +93,66 @@ function App() {
   const [tempQuotes, setTempQuotes] = useState(["Quote 1"]);
   const [tempName, setTempName] = useState("");
   const [selected, setSelected] = useState(-1);
+  const [correct, setCorrect] = useState(0);
+
+  const resetVals = () => {
+    setCorrect(0);
+    setQuoteShown(false);
+    setCurrQuoteLearn("");
+    currentQuoteLearnRef.current.value = "";
+  }
+  useEffect(() => {
+    if (learnOn) {
+      if (down) {
+        forwards()
+
+      }
+      if (up) {
+        backwards()
+
+
+      }
+
+    }
+
+  }, [down, up])
+  const forwards = () => {
+    setCurrNumber((mod(currNumber + 1, state.qLibrary[selected].quotes.length)));
+    resetVals()
+
+  }
+  const backwards = () => {
+    setCurrNumber((mod(currNumber - 1, state.qLibrary[selected].quotes.length)));
+    resetVals()
+
+  }
+
+
   // const [show, setShow] = useState(true);
 
+  const [currQuoteLearn, setCurrQuoteLearn] = useState("");
 
+  const processLearn = (e, correctQuote) => {
+    if (e.repeat) return;
+    if (e.key == "Enter") {
+      if (currQuoteLearn == correctQuote) {
+        setCorrect(1);
+        dispatch({ type: 'addCorrect', bankNum: selected, quoteInd: currNumber })
+        currentQuoteLearnRef.current.value = "";
+      } else {
+        setCorrect(-1);
+        console.log("oi")
+        dispatch({ type: 'addIncorrect', bankNum: selected, quoteInd: currNumber })
+      }
+    }
+
+  }
+
+  const recordLearn = (e) => {
+    setQuoteShown(false);
+    setCurrQuoteLearn(e.target.value);
+
+  }
 
   const addQuoteBank = () => {
     let b = [];
@@ -85,12 +194,12 @@ function App() {
             {selected !== -1 ? <div className='bTitle'>{state.qLibrary[selected].name}</div> : <div className='bTitle'>Quotes</div>}
             <div className='action' onClick={() => { if (selected !== -1) setViewOn(true); }}>View</div>
             <div className='action' onClick={() => { if (selected !== -1) setLearnOn(true); }}>Learn</div>
-            <div className='action'>Revise</div>
+            {/* <div className='action'>Revise</div> */}
           </div>
         </div>
         <Modal open={open} onClose={() => setOpen(false)}>
           <div className='quoteBank'>
-            <div className='back' onClick={() => setOpen(false) || setTempQuotes(["Quote 1"])}>Cancel</div>
+            <div className='f' onClick={() => setOpen(false) || setTempQuotes(["Quote 1"])}>Cancel</div>
             <div className='main'>
               <input onChange={((e) => setTempName(e.target.value))} type="text" className="in" placeholder="Name of Quotebank" spellCheck="false"></input>
               <div className='quoteBankQuotes'>
@@ -110,12 +219,12 @@ function App() {
         <Modal open={viewOn} >
           {selected != -1 ? <div className='view'>
             <div className='titleM'>{state.qLibrary[selected].name}</div>
-            <div className='mainSpace'>
+            <div className='mainS'>
 
               <div className='quotesV'>
 
                 {state.qLibrary[selected].quotes.map((quote, index) => {
-                  return <div className='quoteV'>{quote.text} <div className='numberV'>{index + 1}</div><div className='stats'><div className='correct'>Correct: {quote.correct}</div> <div className='incorrect'>Incorrect: {quote.incorrect}</div> </div></div>
+                  return <div key={index} className='quoteV'>{quote.text} <div className='numberV'>{index + 1}</div><div className='stats'><div className='correct'>Correct: {quote.correct}</div> <div className='incorrect'>Incorrect: {quote.incorrect}</div> </div></div>
                 })}
               </div>
 
@@ -132,15 +241,17 @@ function App() {
             <div className='learn'>
               <div className='titleM'>{state.qLibrary[selected].name}</div>
               <div className='mainSpace'>
-                <div className='quoteG' onClick={() => {setQuoteShown(!quoteShown)}}>
-                  <div className={`quoteV clickable`}><div className={`${quoteShown ? 'shown' : 'hidden'}`}>{quoteShown ? state.qLibrary[selected].quotes[currNumber].text : 'Click to show'}</div> <div className='numberV'>{currNumber + 1}</div></div>
+                <div className='quoteG' >
+                  <div onClick={() => { setQuoteShown(!quoteShown) }} className={`quoteV clickable`}><div className={`${quoteShown ? 'shown' : 'hidden'}`}>{quoteShown ? state.qLibrary[selected].quotes[currNumber].text : 'Click to show'}</div> <div className={`${correct == 0 ? 'numberV' : correct == 1 ? 'numberVC' : 'numberVW'}`}>{currNumber + 1}</div></div>
                 </div>
-                <div><input className='lAnswer' placeholder='Quote' onPaste={(e) => {e.preventDefault()}} onChange={(e) => {setQuoteShown(false)}}></input></div>
+                <div><input ref={currentQuoteLearnRef} onKeyDown={(e) => { processLearn(e, state.qLibrary[selected].quotes[currNumber].text) }} onChange={(e) => { recordLearn(e) }} className='lAnswer' placeholder='Quote' onPaste={(e) => { e.preventDefault() }}></input></div>
 
               </div>
 
 
               <div className='back2' onClick={() => setLearnOn(false)}>Back</div>
+              <div className='up' onClick={backwards}>↑</div>
+              <div className='down' onClick={forwards}>↓</div>
             </div>
           </> : ''}
 
